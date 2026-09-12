@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<questions>
+    <question id="EM_1">
+        <questionText>What causes the phases of the Moon?</questionText>
+        <referenceAnswers>
+            <referenceAnswer id="EM_1_a1">The phases of the Moon are caused by the relative positions of the Earth, Moon, and Sun. As the Moon orbits the Earth, different portions of its sunlit surface are visible from Earth.</referenceAnswer>
+        </referenceAnswers>
+        <studentAnswers>
+            <studentAnswer id="EM_1_s1" accuracy="correct">The Moon phases happen because the Moon orbits around the Earth and we observe different portions of the lit surface.</studentAnswer>
+            <studentAnswer id="EM_1_s2" accuracy="incorrect">The Moon phases are caused by clouds in the Earth atmosphere blocking the Moon light at different times of the month.</studentAnswer>
+        </studentAnswers>
+    </question>
+    <question id="EM_2">
+        <questionText>Do heavy and light objects fall at different speeds in a vacuum?</questionText>
+        <referenceAnswers>
+            <referenceAnswer id="EM_2_a1">No, in a vacuum where there is no air resistance, all objects accelerate and fall at the exact same rate regardless of their mass.</referenceAnswer>
+        </referenceAnswers>
+        <studentAnswers>
+            <studentAnswer id="EM_2_s1" accuracy="contradictory">All objects experience gravitational pull in a vacuum, but heavier objects fall faster than lighter objects because they have more mass.</studentAnswer>
+            <studentAnswer id="EM_2_s2" accuracy="correct">In a vacuum without air resistance, both heavy and light objects fall at the exact same rate.</studentAnswer>
+        </studentAnswers>
+    </question>
+    <question id="BIO_1">
+        <questionText>What is photosynthesis?</questionText>
+        <referenceAnswers>
+            <referenceAnswer id="BIO_1_a1">Photosynthesis is the chemical process by which green plants and certain organisms convert sunlight, water, and carbon dioxide into glucose and oxygen.</referenceAnswer>
+        </referenceAnswers>
+        <studentAnswers>
+            <studentAnswer id="BIO_1_s1" accuracy="incorrect">Photosynthesis is when animals consume oxygen and release carbon dioxide during cellular respiration.</studentAnswer>
+        </studentAnswers>
+    </question>
+</questions>
