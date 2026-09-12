@@ -42,9 +42,7 @@ FALLBACK_MODELS = [
 
 def get_model_name(attempt: int = 0) -> str:
     """Return model name, rotating to fresh models if earlier ones hit quota limits."""
-    env_override = os.getenv("LLM_MODEL")
-    if env_override and env_override not in ("gemini-3.5-flash", "gpt-4o-mini", "gemini-3.7-flash"):
-        return env_override
+    # Always prioritize the robust FALLBACK_MODELS sequence
     return FALLBACK_MODELS[attempt % len(FALLBACK_MODELS)]
 
 # ---------------------------------------------------------------------------
