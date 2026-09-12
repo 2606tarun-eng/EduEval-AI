@@ -33,12 +33,17 @@ _client = AsyncOpenAI(
 )
 
 # Priority order of available Gemini Flash models for resilient free-tier quota failover
-FALLBACK_MODELS = ["gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
+FALLBACK_MODELS = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.7-flash",
+]
 
 def get_model_name(attempt: int = 0) -> str:
     """Return model name, rotating to fresh models if earlier ones hit quota limits."""
     env_override = os.getenv("LLM_MODEL")
-    if env_override and env_override not in ("gemini-3.5-flash", "gpt-4o-mini"):
+    if env_override and env_override not in ("gemini-3.5-flash", "gpt-4o-mini", "gemini-3.7-flash"):
         return env_override
     return FALLBACK_MODELS[attempt % len(FALLBACK_MODELS)]
 
@@ -168,10 +173,10 @@ async def evaluate_answer_semantics(data: EvaluationRequest) -> dict[str, Any]:
         )
     user_message = "\n\n".join(user_parts)
 
-    # ── Call the LLM with retry for high-demand spikes ─────────────────────
+    # ── Call the LLM with failover for resilient free-tier handling ─────────
     response = None
     last_exc = None
-    for attempt in range(3):
+    for attempt in range(len(FALLBACK_MODELS)):
         try:
             current_model = get_model_name(attempt)
             logger.info("Calling LLM model: %s (attempt %d)", current_model, attempt + 1)
@@ -188,19 +193,13 @@ async def evaluate_answer_semantics(data: EvaluationRequest) -> dict[str, Any]:
             break
         except Exception as exc:
             last_exc = exc
-            logger.warning("LLM API call attempt %d failed: %s", attempt + 1, exc)
-            if attempt < 2:
+            logger.warning("LLM API call attempt %d on %s failed: %s", attempt + 1, current_model, exc)
+            if attempt < len(FALLBACK_MODELS) - 1:
                 import asyncio
-                # If rate-limited (429) or high-demand (503), wait 12-15 seconds for quota reset
-                exc_str = str(exc)
-                if "429" in exc_str or "503" in exc_str or "RESOURCE_EXHAUSTED" in exc_str:
-                    wait_time = 14.0
-                else:
-                    wait_time = 2.0 * (attempt + 1)
-                logger.info("Retrying LLM call in %.1fs...", wait_time)
-                await asyncio.sleep(wait_time)
+                # Immediately switch model on 429 (quota) with minimal 1s pause
+                await asyncio.sleep(1.0)
             else:
-                logger.exception("All LLM API call attempts failed")
+                logger.exception("All LLM API call attempts failed across all fallback models")
                 raise RuntimeError(f"LLM API error: {exc}") from exc
 
     raw_text: str = (response.choices[0].message.content or "").strip()
