@@ -127,8 +127,12 @@ st.markdown(
 # Constants & OCR API Setup
 # ---------------------------------------------------------------------------
 
-BACKEND_URL = "http://localhost:8000/evaluate"
-OCR_URL = "http://localhost:8000/extract-text"
+import os
+
+# Render live backend URL (override with BACKEND_BASE_URL env var if running locally)
+DEFAULT_BASE_URL = os.getenv("BACKEND_BASE_URL", "https://edueval-ai-njfc.onrender.com").rstrip("/")
+BACKEND_URL = f"{DEFAULT_BASE_URL}/evaluate"
+OCR_URL = f"{DEFAULT_BASE_URL}/extract-text"
 
 CATEGORY_CONFIG = {
     "correct":       {"card": "result-correct",       "text": "correct-text",       "icon": "✅", "label": "Correct"},
@@ -407,18 +411,18 @@ if submitted:
             response = requests.post(
                 BACKEND_URL,
                 json=payload,
-                timeout=30,
+                timeout=60,
             )
             response.raise_for_status()
             data: dict = response.json()
 
         except requests.exceptions.ConnectionError:
             st.error(
-                "🔌 **Cannot reach backend.** Make sure FastAPI is running on `http://localhost:8000`."
+                f"🔌 **Cannot reach backend.** Make sure FastAPI is reachable at `{DEFAULT_BASE_URL}`."
             )
             st.stop()
         except requests.exceptions.Timeout:
-            st.error("⏱️ **Request timed out.** The backend took too long to respond.")
+            st.error("⏱️ **Request timed out.** The backend took too long to respond (might be spinning up from cold start).")
             st.stop()
         except requests.exceptions.HTTPError as exc:
             st.error(f"🚨 **Backend error {exc.response.status_code}:** {exc.response.text}")
