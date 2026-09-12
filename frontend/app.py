@@ -702,40 +702,77 @@ if submitted:
     cfg                 = CATEGORY_CONFIG.get(category, CATEGORY_CONFIG["incorrect"])
     confidence: float   = probabilities.get(category, 0.0)
 
-    # Results Header
+    # ── BIG RESULT BANNER ─────────────────────────────────────────────────────
     st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
-    st.markdown("### 📊 Evaluation Results")
 
-    # Row 1: Verdict + Probabilities
-    res_col1, res_col2 = st.columns([3, 5])
+    BANNER_COLORS = {
+        "correct":       "linear-gradient(135deg,#16a34a,#22c55e)",
+        "contradictory": "linear-gradient(135deg,#d97706,#f59e0b)",
+        "incorrect":     "linear-gradient(135deg,#dc2626,#ef4444)",
+    }
+    grad = BANNER_COLORS.get(category, BANNER_COLORS["incorrect"])
 
-    with res_col1:
-        st.markdown(
-            f"""
-            <div class="{cfg['card']}">
-                <div class="result-label {cfg['text']}">{cfg['icon']} Verdict</div>
-                <div class="result-value {cfg['text']}">{cfg['label']}</div>
+    prob_correct       = probabilities.get("correct", 0.0)
+    prob_contradictory = probabilities.get("contradictory", 0.0)
+    prob_incorrect     = probabilities.get("incorrect", 0.0)
+
+    st.markdown(
+        f"""
+        <div style="
+            background:{grad};
+            border-radius:20px;
+            padding:2rem 2.5rem;
+            text-align:center;
+            margin-bottom:1.5rem;
+            box-shadow:0 8px 30px rgba(0,0,0,0.15);
+        ">
+            <div style="color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;
+                        text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.4rem;">
+                Evaluation Verdict
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            <div style="color:#ffffff;font-size:3.5rem;font-weight:900;line-height:1;margin-bottom:0.4rem;">
+                {cfg['icon']} {cfg['label'].upper()}
+            </div>
+            <div style="color:rgba(255,255,255,0.88);font-size:1.15rem;font-weight:600;margin-bottom:1rem;">
+                Confidence: {confidence * 100:.1f}%
+            </div>
+            <div style="background:rgba(255,255,255,0.25);border-radius:999px;height:12px;
+                        width:70%;margin:0 auto 1.5rem auto;overflow:hidden;">
+                <div style="background:#ffffff;height:100%;width:{confidence * 100:.1f}%;
+                            border-radius:999px;"></div>
+            </div>
+            <div style="display:flex;justify-content:center;gap:1.5rem;flex-wrap:wrap;">
+                <div style="background:rgba(255,255,255,0.2);border-radius:14px;
+                            padding:0.9rem 1.6rem;min-width:110px;">
+                    <div style="color:rgba(255,255,255,0.75);font-size:0.68rem;font-weight:700;
+                                text-transform:uppercase;letter-spacing:0.07em;">Correct</div>
+                    <div style="color:#ffffff;font-size:1.9rem;font-weight:900;margin-top:0.1rem;">
+                        {prob_correct * 100:.1f}%
+                    </div>
+                </div>
+                <div style="background:rgba(255,255,255,0.2);border-radius:14px;
+                            padding:0.9rem 1.6rem;min-width:110px;">
+                    <div style="color:rgba(255,255,255,0.75);font-size:0.68rem;font-weight:700;
+                                text-transform:uppercase;letter-spacing:0.07em;">Contradictory</div>
+                    <div style="color:#ffffff;font-size:1.9rem;font-weight:900;margin-top:0.1rem;">
+                        {prob_contradictory * 100:.1f}%
+                    </div>
+                </div>
+                <div style="background:rgba(255,255,255,0.2);border-radius:14px;
+                            padding:0.9rem 1.6rem;min-width:110px;">
+                    <div style="color:rgba(255,255,255,0.75);font-size:0.68rem;font-weight:700;
+                                text-transform:uppercase;letter-spacing:0.07em;">Incorrect</div>
+                    <div style="color:#ffffff;font-size:1.9rem;font-weight:900;margin-top:0.1rem;">
+                        {prob_incorrect * 100:.1f}%
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    with res_col2:
-        st.markdown('<p class="section-label">📈 Category Probabilities</p>', unsafe_allow_html=True)
-        prob_correct       = probabilities.get("correct", 0.0)
-        prob_contradictory = probabilities.get("contradictory", 0.0)
-        prob_incorrect     = probabilities.get("incorrect", 0.0)
-
-        col_c, col_ct, col_i = st.columns(3)
-        col_c.metric("✅ Correct",        f"{prob_correct * 100:.1f}%")
-        col_ct.metric("⚠️ Contradictory", f"{prob_contradictory * 100:.1f}%")
-        col_i.metric("❌ Incorrect",      f"{prob_incorrect * 100:.1f}%")
-
-        st.markdown('<p class="section-label" style="margin-top:0.75rem">🎯 Confidence Score</p>', unsafe_allow_html=True)
-        st.progress(confidence, text=f"{confidence * 100:.1f}% confidence in **{cfg['label']}**")
-
-    # Row 2: Reasoning
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+    # ── AI REASONING BOX ─────────────────────────────────────────────────────
     st.markdown('<p class="section-label">💬 AI Reasoning & Explanation</p>', unsafe_allow_html=True)
     with st.expander("View detailed AI reasoning", expanded=True):
         st.markdown(
@@ -743,7 +780,6 @@ if submitted:
             unsafe_allow_html=True,
         )
 
-    # Debug
     with st.expander("🛠️ Raw API Response (debug)", expanded=False):
         st.json(data)
 
