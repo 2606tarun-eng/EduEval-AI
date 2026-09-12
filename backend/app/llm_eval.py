@@ -32,7 +32,9 @@ _client = AsyncOpenAI(
     base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
 )
 
-_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+def get_model_name() -> str:
+    """Return configured model name from environment, defaulting to gemini-3.7-flash."""
+    return os.getenv("LLM_MODEL", "gemini-3.7-flash")
 
 # ---------------------------------------------------------------------------
 # System prompt — ED-05 bias-resistant assessment rules
@@ -166,7 +168,7 @@ async def evaluate_answer_semantics(data: EvaluationRequest) -> dict[str, Any]:
     for attempt in range(3):
         try:
             response = await _client.chat.completions.create(
-                model=_MODEL,
+                model=get_model_name(),
                 temperature=0.0,           # 0.0 for deterministic, objective grading
                 max_tokens=1200,
                 response_format={"type": "json_object"},
