@@ -32,9 +32,15 @@ _client = AsyncOpenAI(
     base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
 )
 
-def get_model_name() -> str:
-    """Return configured model name from environment, defaulting to gemini-3.7-flash."""
-    return os.getenv("LLM_MODEL", "gemini-3.7-flash")
+# Priority order of available Gemini Flash models for resilient free-tier quota failover
+FALLBACK_MODELS = ["gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
+
+def get_model_name(attempt: int = 0) -> str:
+    """Return model name, rotating to fresh models if earlier ones hit quota limits."""
+    env_override = os.getenv("LLM_MODEL")
+    if env_override and env_override not in ("gemini-3.5-flash", "gpt-4o-mini"):
+        return env_override
+    return FALLBACK_MODELS[attempt % len(FALLBACK_MODELS)]
 
 # ---------------------------------------------------------------------------
 # System prompt — ED-05 bias-resistant assessment rules
@@ -167,8 +173,10 @@ async def evaluate_answer_semantics(data: EvaluationRequest) -> dict[str, Any]:
     last_exc = None
     for attempt in range(3):
         try:
+            current_model = get_model_name(attempt)
+            logger.info("Calling LLM model: %s (attempt %d)", current_model, attempt + 1)
             response = await _client.chat.completions.create(
-                model=get_model_name(),
+                model=current_model,
                 temperature=0.0,           # 0.0 for deterministic, objective grading
                 max_tokens=1200,
                 response_format={"type": "json_object"},
