@@ -588,56 +588,8 @@ with col_s:
 
 st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------------
-# SAMPLE QUICK TEST BUTTONS
-# ---------------------------------------------------------------------------
 
-st.markdown('<p class="section-label">⚡ Quick Sample Tests</p>', unsafe_allow_html=True)
-s1, s2, s3 = st.columns(3)
 
-def load_sample(q, r, a):
-    st.session_state["question_input"] = q
-    st.session_state["ref_input"] = r
-    st.session_state["student_input"] = a
-
-with s1:
-    st.button(
-        "✅ Correct Answer Sample",
-        key="sample_correct",
-        on_click=load_sample,
-        args=(
-            "What is photosynthesis?",
-            "The process by which plants convert sunlight into food using carbon dioxide and water.",
-            "Plants make food using sunlight, CO2 and water.",
-        ),
-        use_container_width=True,
-    )
-with s2:
-    st.button(
-        "⚠️ Contradictory Sample",
-        key="sample_contradictory",
-        on_click=load_sample,
-        args=(
-            "What is photosynthesis?",
-            "The process by which plants convert sunlight into food using carbon dioxide and water.",
-            "Plants consume food and release carbon dioxide during photosynthesis.",
-        ),
-        use_container_width=True,
-    )
-with s3:
-    st.button(
-        "❌ Incorrect Answer Sample",
-        key="sample_incorrect",
-        on_click=load_sample,
-        args=(
-            "What is photosynthesis?",
-            "The process by which plants convert sunlight into food using carbon dioxide and water.",
-            "Photosynthesis is when animals digest their food in the stomach.",
-        ),
-        use_container_width=True,
-    )
-
-st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # SUBMIT BUTTON
