@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import requests
 import re
 import os
@@ -89,18 +89,23 @@ def extract_ocr_text(uploaded_file, field_name):
     return ""
 
 def split_qa_text(raw_text):
+    """
+    Detects if raw_text contains both a Question and an Answer.
+    Returns (question_part, answer_part) or (None, None).
+    """
     if not raw_text or not raw_text.strip():
         return None, None
     patterns = [
-        r'(?i)(?:[\r\n]+|[.?!]\s+|\s{2,}|\A)\s*(?:student[\'\s]*s?\s+answer|answer|ans|solution|soln|sol)[\s.:\-]+',
-        r'(?i)(?:[\r\n]+|[.?!]\s+)\s*(?:a)[\s.:\-]+',
+        r'(?i)(?:[\r\n]+|[.?!]\s+|\s{2,}|\A)\s*(?:student[\'\s]*s?\s+answer|model\s+answer|reference\s+answer|answer|ans\b|solution|soln|sol\b)[\s.:\-]+',
+        r'(?i)(?:[\r\n]+|[.?!]\s+)\s*(?:a|ans)\s*[\.:\-]+',
+        r'(?i)(?:[\r\n]+)\s*(?:ans|a)\s+',
     ]
     for pat in patterns:
         matches = list(re.finditer(pat, raw_text))
         if matches:
             chosen = None
             for m in matches:
-                if m.start() > 3:
+                if m.start() > 2:
                     chosen = m
                     break
             if not chosen and matches and matches[0].start() > 0:
@@ -109,9 +114,9 @@ def split_qa_text(raw_text):
                 split_idx = chosen.start()
                 if raw_text[split_idx] in '.?!':
                     split_idx += 1
-                q_part = re.sub(r'(?i)^(?:question|q)[\s.:\-0-9]*', '', raw_text[:split_idx].strip()).strip()
+                q_part = re.sub(r'(?i)^(?:question|q|\d+[\.)])[\s.:\-0-9]*', '', raw_text[:split_idx].strip()).strip()
                 a_part = re.sub(r'(?i)^(?:student[\'\s]*s?\s+answer|answer|ans|solution|soln|sol|a)[\s.:\-]+', '', raw_text[chosen.end():].strip()).strip()
-                if len(q_part) >= 3 and len(a_part) >= 1:
+                if len(q_part) >= 2 and len(a_part) >= 1:
                     return q_part, a_part
     return None, None
 
