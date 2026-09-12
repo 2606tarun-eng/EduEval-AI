@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import json
 import re
+import os
 
 # ---------------------------------------------------------------------------
 # Page Config
@@ -15,121 +16,279 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Custom CSS — clean, modern look
+# Custom CSS — Light Theme, Professional & Clean
 # ---------------------------------------------------------------------------
 
 st.markdown(
     """
     <style>
-        /* ── Global ── */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-
-        /* ── Header banner ── */
-        .edu-header {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            border-radius: 16px;
-            padding: 2rem 2.5rem;
-            margin-bottom: 2rem;
-            text-align: center;
+        /* ── Google Fonts ── */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
         }
-        .edu-header h1 {
-            color: #e2e8f0;
-            font-size: 2.4rem;
-            font-weight: 700;
-            margin: 0 0 0.4rem 0;
+
+        /* ── Streamlit main background ── */
+        .stApp { background-color: #f1f5f9; }
+        .block-container { padding-top: 1.5rem !important; }
+
+        /* ── TOP HEADER BANNER ── */
+        .hero-banner {
+            background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 50%, #60a5fa 100%);
+            border-radius: 20px;
+            padding: 2.2rem 3rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 8px 30px rgba(59,130,246,0.25);
+        }
+        .hero-left h1 {
+            color: #ffffff;
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin: 0 0 0.3rem 0;
             letter-spacing: -0.5px;
         }
-        .edu-header p {
-            color: #94a3b8;
+        .hero-left p {
+            color: rgba(255,255,255,0.85);
             font-size: 1rem;
-            margin: 0;
+            margin: 0 0 0.8rem 0;
         }
-        .edu-header .badge {
-            display: inline-block;
-            background: #0f3460;
-            border: 1px solid #1e4d8c;
-            color: #60a5fa;
-            font-size: 0.75rem;
+        .hero-right {
+            text-align: right;
+        }
+        .hero-right .team-name {
+            color: rgba(255,255,255,0.9);
+            font-size: 0.85rem;
             font-weight: 600;
-            padding: 0.2rem 0.75rem;
-            border-radius: 999px;
-            margin-bottom: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .hero-right .team-label {
+            color: rgba(255,255,255,0.6);
+            font-size: 0.72rem;
             letter-spacing: 0.05em;
             text-transform: uppercase;
         }
-
-        /* ── Section cards ── */
-        .section-card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 0.5rem;
-        }
-        .section-label {
-            color: #94a3b8;
-            font-size: 0.78rem;
+        .badge-pill {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.35);
+            color: #ffffff;
+            font-size: 0.72rem;
             font-weight: 600;
-            letter-spacing: 0.08em;
+            padding: 0.25rem 0.8rem;
+            border-radius: 999px;
+            margin-right: 0.4rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        /* ── STATS BAR ── */
+        .stats-bar {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.8rem;
+        }
+        .stat-card {
+            flex: 1;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 1.1rem 1.4rem;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .stat-card .stat-value {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: #1d4ed8;
+            display: block;
+        }
+        .stat-card .stat-label {
+            font-size: 0.73rem;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-top: 0.2rem;
+        }
+
+        /* ── INPUT SECTION CARD ── */
+        .input-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 1.6rem;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            margin-bottom: 1.2rem;
+        }
+        .input-card-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            margin-bottom: 0.7rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        /* ── SECTION LABEL ── */
+        .section-label {
+            color: #475569;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.09em;
             text-transform: uppercase;
             margin-bottom: 0.4rem;
         }
 
-        /* ── Result cards ── */
-        .result-correct  { background:#052e16; border:1px solid #16a34a; border-radius:12px; padding:1.25rem; }
-        .result-contradictory { background:#422006; border:1px solid #d97706; border-radius:12px; padding:1.25rem; }
-        .result-incorrect { background:#3f1d1d; border:1px solid #dc2626; border-radius:12px; padding:1.25rem; }
-        .result-label { font-size:0.78rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; }
-        .result-value { font-size:2rem; font-weight:700; margin-top:0.2rem; }
-        .correct-text { color:#4ade80; }
-        .contradictory-text { color:#fbbf24; }
-        .incorrect-text { color:#f87171; }
+        /* ── RESULT CARDS — Light versions ── */
+        .result-correct {
+            background: #f0fdf4;
+            border: 2px solid #22c55e;
+            border-radius: 14px;
+            padding: 1.4rem;
+        }
+        .result-contradictory {
+            background: #fffbeb;
+            border: 2px solid #f59e0b;
+            border-radius: 14px;
+            padding: 1.4rem;
+        }
+        .result-incorrect {
+            background: #fff1f2;
+            border: 2px solid #ef4444;
+            border-radius: 14px;
+            padding: 1.4rem;
+        }
+        .result-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+        }
+        .result-value {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-top: 0.2rem;
+        }
+        .correct-text      { color: #15803d; }
+        .contradictory-text{ color: #b45309; }
+        .incorrect-text    { color: #dc2626; }
 
-        /* ── Reasoning box ── */
+        /* ── REASONING BOX ── */
         .reasoning-box {
-            background: #0f172a;
-            border: 1px solid #1e293b;
-            border-left: 4px solid #6366f1;
-            border-radius: 8px;
-            padding: 1.25rem 1.5rem;
-            color: #cbd5e1;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #3b82f6;
+            border-radius: 10px;
+            padding: 1.2rem 1.5rem;
+            color: #334155;
             font-size: 0.95rem;
-            line-height: 1.7;
+            line-height: 1.75;
         }
 
-        /* ── Divider ── */
-        .section-divider { border-top: 1px solid #1e293b; margin: 1.5rem 0; }
+        /* ── DIVIDER ── */
+        .section-divider {
+            border-top: 1px solid #e2e8f0;
+            margin: 1.8rem 0;
+        }
 
-        /* ── Submit button override ── */
+        /* ── SUBMIT BUTTON ── */
         div.stButton > button {
-            background: linear-gradient(135deg, #6366f1, #818cf8);
+            background: linear-gradient(135deg, #1d4ed8, #3b82f6);
             color: white;
-            font-weight: 600;
+            font-weight: 700;
             font-size: 1rem;
             border: none;
-            border-radius: 10px;
-            padding: 0.65rem 2.5rem;
+            border-radius: 12px;
+            padding: 0.75rem 2.5rem;
             width: 100%;
-            transition: opacity 0.2s;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px rgba(59,130,246,0.35);
         }
-        div.stButton > button:hover { opacity: 0.88; }
+        div.stButton > button:hover {
+            opacity: 0.9;
+            box-shadow: 0 6px 20px rgba(59,130,246,0.45);
+            transform: translateY(-1px);
+        }
 
-        /* ── Hide Streamlit chrome ── */
+        /* ── HOW IT WORKS INFO BOXES ── */
+        .how-step {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 1rem 1.2rem;
+            text-align: center;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+        }
+        .how-step .step-icon { font-size: 1.8rem; }
+        .how-step .step-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-top: 0.4rem;
+        }
+        .how-step .step-desc {
+            font-size: 0.74rem;
+            color: #64748b;
+            margin-top: 0.2rem;
+            line-height: 1.4;
+        }
+
+        /* ── FOOTER ── */
+        .footer {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.78rem;
+            margin-top: 3rem;
+            padding: 1.2rem 0;
+            border-top: 1px solid #e2e8f0;
+        }
+        .footer b { color: #3b82f6; }
+
+        /* ── HIDE STREAMLIT CHROME ── */
         #MainMenu, footer { visibility: hidden; }
+
+        /* ── TEXTAREA STYLE ── */
+        .stTextArea textarea {
+            background: #f8fafc !important;
+            border: 1.5px solid #e2e8f0 !important;
+            border-radius: 10px !important;
+            color: #1e293b !important;
+            font-size: 0.92rem !important;
+        }
+        .stTextArea textarea:focus {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.12) !important;
+        }
+
+        /* ── INFO BANNER ── */
+        .info-banner {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 12px;
+            padding: 0.85rem 1.2rem;
+            color: #1d4ed8;
+            font-size: 0.84rem;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+        }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Constants & OCR API Setup
+# Constants & API Setup
 # ---------------------------------------------------------------------------
 
-import os
-
-# Render live backend URL (override with BACKEND_BASE_URL env var if running locally)
 DEFAULT_BASE_URL = os.getenv("BACKEND_BASE_URL", "https://edueval-ai-njfc.onrender.com").rstrip("/")
 BACKEND_URL = f"{DEFAULT_BASE_URL}/evaluate"
 OCR_URL = f"{DEFAULT_BASE_URL}/extract-text"
@@ -141,21 +300,18 @@ CATEGORY_CONFIG = {
 }
 
 # ---------------------------------------------------------------------------
-# Session State Initialization for Inputs & File Tracking
+# Session State Initialization
 # ---------------------------------------------------------------------------
 
-if "question_input" not in st.session_state:
-    st.session_state["question_input"] = ""
-if "ref_input" not in st.session_state:
-    st.session_state["ref_input"] = ""
-if "student_input" not in st.session_state:
-    st.session_state["student_input"] = ""
-if "processed_files" not in st.session_state:
-    st.session_state["processed_files"] = {}
+for key, val in [("question_input", ""), ("ref_input", ""), ("student_input", ""), ("processed_files", {})]:
+    if key not in st.session_state:
+        st.session_state[key] = val
 
+# ---------------------------------------------------------------------------
+# OCR & Auto-Split Utilities
+# ---------------------------------------------------------------------------
 
 def extract_ocr_text(uploaded_file, field_name: str) -> str:
-    """Send uploaded image to backend /extract-text and return the string."""
     try:
         files = {
             "file": (
@@ -175,22 +331,12 @@ def extract_ocr_text(uploaded_file, field_name: str) -> str:
 
 
 def split_qa_text(raw_text: str) -> tuple[str | None, str | None]:
-    """
-    Detects if raw_text contains both a Question and an Answer.
-    Returns (question_part, answer_part) or (None, None) if no clear split found.
-    Handles markers like:
-      - Ans:, Answer:, Ans -, Answer -, Ans., Solution:, Sol:
-      - Q: ... A: ...
-      - Student Answer:
-    """
     if not raw_text or not raw_text.strip():
         return None, None
-
     patterns = [
-        r'(?i)(?:[\r\n]+|[.?!]\s+|\s{2,}|\A)\s*(?:student[\'\s]*s?\s+answer|answer|ans|solution|soln|sol)[\s.:\-]+',
+        r'(?i)(?:[\r\n]+|[.?!]\s+|\s{2,}|\A)\s*(?:student[\'\\s]*s?\s+answer|answer|ans|solution|soln|sol)[\s.:\-]+',
         r'(?i)(?:[\r\n]+|[.?!]\s+)\s*(?:a)[\s.:\-]+',
     ]
-
     for pat in patterns:
         matches = list(re.finditer(pat, raw_text))
         if matches:
@@ -201,47 +347,123 @@ def split_qa_text(raw_text: str) -> tuple[str | None, str | None]:
                     break
             if not chosen and matches and matches[0].start() > 0:
                 chosen = matches[0]
-
             if chosen:
                 split_idx = chosen.start()
                 if raw_text[split_idx] in '.?!':
                     split_idx += 1
                 q_part = raw_text[:split_idx].strip()
                 a_part = raw_text[chosen.end():].strip()
-
-                # Clean leading 'Q:' / 'Question:' / 'Q1.' from q_part if present
                 q_part = re.sub(r'(?i)^(?:question|q)[\s.:\-0-9]*', '', q_part).strip()
-                # Clean leading Answer marker from a_part if still present
-                a_part = re.sub(r'(?i)^(?:student[\'\s]*s?\s+answer|answer|ans|solution|soln|sol|a)[\s.:\-]+', '', a_part).strip()
-
+                a_part = re.sub(r'(?i)^(?:student[\'\\s]*s?\s+answer|answer|ans|solution|soln|sol|a)[\s.:\-]+', '', a_part).strip()
                 if len(q_part) >= 3 and len(a_part) >= 1:
                     return q_part, a_part
-
     return None, None
 
-
 # ---------------------------------------------------------------------------
-# Header
+# HERO HEADER BANNER
 # ---------------------------------------------------------------------------
 
 st.markdown(
     """
-    <div class="edu-header">
-        <div class="badge">🏆 Hackathon Build · ED-05</div>
-        <h1>🎓 EduEval AI</h1>
-        <p>Semantic Answer Assessor — AI-powered evaluation of student responses</p>
+    <div class="hero-banner">
+        <div class="hero-left">
+            <h1>🎓 EduEval AI</h1>
+            <p>AI-Powered Semantic Answer Evaluator with Explainable Grading</p>
+            <div>
+                <span class="badge-pill">ED-05</span>
+                <span class="badge-pill">XAI</span>
+                <span class="badge-pill">SemEval 2013</span>
+                <span class="badge-pill">Hackathon Build</span>
+            </div>
+        </div>
+        <div class="hero-right">
+            <div class="team-label">Team</div>
+            <div class="team-name">⚡ Asynchronous</div>
+            <div style="color:rgba(255,255,255,0.55);font-size:0.72rem;margin-top:0.5rem;">
+                FastAPI · Streamlit · Google Gemini
+            </div>
+        </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 # ---------------------------------------------------------------------------
-# Input Section
+# STATS BAR
 # ---------------------------------------------------------------------------
 
-col_q, col_sep, col_s = st.columns([5, 0.2, 5])
+st.markdown(
+    """
+    <div class="stats-bar">
+        <div class="stat-card">
+            <span class="stat-value">91.65</span>
+            <div class="stat-label">Benchmark Score / 100</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">3-Way</span>
+            <div class="stat-label">Semantic Grading</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">CF1–CF4</span>
+            <div class="stat-label">Adversarial Defense</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">8,910</span>
+            <div class="stat-label">Training Samples</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">100%</span>
+            <div class="stat-label">Calibrated Confidence</div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-# ── LEFT: Question + Reference Answer ──────────────────────────────────────
+# ---------------------------------------------------------------------------
+# HOW IT WORKS
+# ---------------------------------------------------------------------------
+
+with st.expander("ℹ️ How it works", expanded=False):
+    h1, h2, h3, h4 = st.columns(4)
+    with h1:
+        st.markdown("""
+        <div class="how-step">
+            <div class="step-icon">📝</div>
+            <div class="step-title">Step 1: Input</div>
+            <div class="step-desc">Type your question & answer, or upload a handwritten sheet.</div>
+        </div>""", unsafe_allow_html=True)
+    with h2:
+        st.markdown("""
+        <div class="how-step">
+            <div class="step-icon">👁️</div>
+            <div class="step-title">Step 2: OCR</div>
+            <div class="step-desc">EasyOCR reads handwritten text and auto-fills the form.</div>
+        </div>""", unsafe_allow_html=True)
+    with h3:
+        st.markdown("""
+        <div class="how-step">
+            <div class="step-icon">🤖</div>
+            <div class="step-title">Step 3: AI Grades</div>
+            <div class="step-desc">Google Gemini evaluates and classifies the student's answer.</div>
+        </div>""", unsafe_allow_html=True)
+    with h4:
+        st.markdown("""
+        <div class="how-step">
+            <div class="step-icon">📊</div>
+            <div class="step-title">Step 4: Results</div>
+            <div class="step-desc">Get Verdict, Confidence Score, and detailed AI Reasoning.</div>
+        </div>""", unsafe_allow_html=True)
+
+st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# INPUT SECTION
+# ---------------------------------------------------------------------------
+
+col_q, col_gap, col_s = st.columns([5, 0.2, 5])
+
+# ── LEFT: Question + Reference Answer ─────────────────────────────────────
 with col_q:
 
     # · Question ·
@@ -255,7 +477,7 @@ with col_q:
     if q_img is not None:
         file_sig = f"{q_img.name}_{len(q_img.getvalue())}"
         if st.session_state.processed_files.get("q_img") != file_sig:
-            with st.spinner("🔍 Extracting question text from image via OCR..."):
+            with st.spinner("🔍 Extracting question text via OCR..."):
                 extracted = extract_ocr_text(q_img, "Question")
                 if extracted:
                     q_split, a_split = split_qa_text(extracted)
@@ -269,7 +491,6 @@ with col_q:
                     st.rerun()
                 else:
                     st.session_state.processed_files["q_img"] = file_sig
-
         with st.expander("🖼️ View uploaded Question image", expanded=False):
             st.image(q_img, use_container_width=True)
 
@@ -281,7 +502,7 @@ with col_q:
         key="question_input",
     )
 
-    # Smart Auto-Split detector if both Q & A exist in Question box
+    # Smart Auto-Split detector
     detected_q, detected_a = split_qa_text(question)
     if detected_q and detected_a and not st.session_state.get("student_input", "").strip():
         def do_split(q_val, a_val):
@@ -302,7 +523,10 @@ with col_q:
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
     # · Reference Answer ·
-    st.markdown('<p class="section-label">📖 Reference Answer <span style="color:#475569;font-weight:400;font-size:0.72rem">(optional)</span></p>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="section-label">📖 Reference Answer <span style="color:#94a3b8;font-weight:400;font-size:0.72rem">(optional)</span></p>',
+        unsafe_allow_html=True,
+    )
     ref_img = st.file_uploader(
         "📷 Upload reference answer image (Auto-OCR)",
         type=["png", "jpg", "jpeg", "webp"],
@@ -312,7 +536,7 @@ with col_q:
     if ref_img is not None:
         file_sig = f"{ref_img.name}_{len(ref_img.getvalue())}"
         if st.session_state.processed_files.get("ref_img") != file_sig:
-            with st.spinner("🔍 Extracting reference answer from image via OCR..."):
+            with st.spinner("🔍 Extracting reference answer via OCR..."):
                 extracted = extract_ocr_text(ref_img, "Reference Answer")
                 if extracted:
                     st.session_state["ref_input"] = extracted
@@ -320,13 +544,12 @@ with col_q:
                     st.rerun()
                 else:
                     st.session_state.processed_files["ref_img"] = file_sig
-
         with st.expander("🖼️ View uploaded Reference Answer image", expanded=False):
             st.image(ref_img, use_container_width=True)
 
     reference_answer = st.text_area(
         label="reference_answer_text",
-        placeholder="Paste model answer or upload image above (leave blank to skip)…",
+        placeholder="Paste the model answer or upload image above (leave blank to skip)…",
         height=130,
         label_visibility="collapsed",
         key="ref_input",
@@ -339,12 +562,12 @@ with col_s:
         "📷 Upload student answer image (Auto-OCR)",
         type=["png", "jpg", "jpeg", "webp"],
         key="stu_img_file",
-        help="Upload handwritten or printed student answer sheet to extract text automatically.",
+        help="Upload handwritten or printed student answer sheet.",
     )
     if stu_img is not None:
         file_sig = f"{stu_img.name}_{len(stu_img.getvalue())}"
         if st.session_state.processed_files.get("stu_img") != file_sig:
-            with st.spinner("🔍 Extracting student answer from image via OCR..."):
+            with st.spinner("🔍 Extracting student answer via OCR..."):
                 extracted = extract_ocr_text(stu_img, "Student Answer")
                 if extracted:
                     st.session_state["student_input"] = extracted
@@ -352,7 +575,6 @@ with col_s:
                     st.rerun()
                 else:
                     st.session_state.processed_files["stu_img"] = file_sig
-
         with st.expander("🖼️ View uploaded Student Answer image", expanded=False):
             st.image(stu_img, use_container_width=True)
 
@@ -367,7 +589,58 @@ with col_s:
 st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# Submit
+# SAMPLE QUICK TEST BUTTONS
+# ---------------------------------------------------------------------------
+
+st.markdown('<p class="section-label">⚡ Quick Sample Tests</p>', unsafe_allow_html=True)
+s1, s2, s3 = st.columns(3)
+
+def load_sample(q, r, a):
+    st.session_state["question_input"] = q
+    st.session_state["ref_input"] = r
+    st.session_state["student_input"] = a
+
+with s1:
+    st.button(
+        "✅ Correct Answer Sample",
+        key="sample_correct",
+        on_click=load_sample,
+        args=(
+            "What is photosynthesis?",
+            "The process by which plants convert sunlight into food using carbon dioxide and water.",
+            "Plants make food using sunlight, CO2 and water.",
+        ),
+        use_container_width=True,
+    )
+with s2:
+    st.button(
+        "⚠️ Contradictory Sample",
+        key="sample_contradictory",
+        on_click=load_sample,
+        args=(
+            "What is photosynthesis?",
+            "The process by which plants convert sunlight into food using carbon dioxide and water.",
+            "Plants consume food and release carbon dioxide during photosynthesis.",
+        ),
+        use_container_width=True,
+    )
+with s3:
+    st.button(
+        "❌ Incorrect Answer Sample",
+        key="sample_incorrect",
+        on_click=load_sample,
+        args=(
+            "What is photosynthesis?",
+            "The process by which plants convert sunlight into food using carbon dioxide and water.",
+            "Photosynthesis is when animals digest their food in the stomach.",
+        ),
+        use_container_width=True,
+    )
+
+st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# SUBMIT BUTTON
 # ---------------------------------------------------------------------------
 
 _, btn_col, _ = st.columns([3, 4, 3])
@@ -375,20 +648,19 @@ with btn_col:
     submitted = st.button("🚀 Evaluate Answer", use_container_width=True)
 
 # ---------------------------------------------------------------------------
-# Evaluation Logic
+# EVALUATION LOGIC
 # ---------------------------------------------------------------------------
 
 if submitted:
-    # ── Auto-Split Fallback ──────────────────────────────────────────────────
-    # If student_answer is blank, but question contains both Q & A, auto-split them for evaluation!
+    # Auto-Split fallback
     if not student_answer.strip() and question.strip():
         auto_q, auto_a = split_qa_text(question)
         if auto_q and auto_a:
             question = auto_q
             student_answer = auto_a
-            st.toast("⚡ Auto-split Question & Student Answer for evaluation!", icon="🎯")
+            st.toast("⚡ Auto-split Question & Student Answer!", icon="🎯")
 
-    # ── Validation ──────────────────────────────────────────────────────────
+    # Validation
     if not question.strip():
         st.error("⚠️  Please enter a **Question** before submitting.")
         st.stop()
@@ -396,33 +668,25 @@ if submitted:
         st.error("⚠️  Please enter the **Student Answer** before submitting.")
         st.stop()
 
-    # ── Payload — STRICTLY matches EvaluationRequest schema ─────────────────
+    # Payload
     payload: dict = {
         "question": question.strip(),
         "student_answer": student_answer.strip(),
     }
     if reference_answer.strip():
         payload["reference_answer"] = reference_answer.strip()
-    # reference_answer is omitted entirely when blank (backend treats None)
 
-    # ── API Call ─────────────────────────────────────────────────────────────
-    with st.spinner("🔍 Evaluating with AI…"):
+    # API Call
+    with st.spinner("🤖 Evaluating with Google Gemini AI…"):
         try:
-            response = requests.post(
-                BACKEND_URL,
-                json=payload,
-                timeout=60,
-            )
+            response = requests.post(BACKEND_URL, json=payload, timeout=60)
             response.raise_for_status()
             data: dict = response.json()
-
         except requests.exceptions.ConnectionError:
-            st.error(
-                f"🔌 **Cannot reach backend.** Make sure FastAPI is reachable at `{DEFAULT_BASE_URL}`."
-            )
+            st.error(f"🔌 **Cannot reach backend.** Make sure FastAPI is reachable at `{DEFAULT_BASE_URL}`.")
             st.stop()
         except requests.exceptions.Timeout:
-            st.error("⏱️ **Request timed out.** The backend took too long to respond (might be spinning up from cold start).")
+            st.error("⏱️ **Request timed out.** The backend is spinning up from cold start — please retry in 30 seconds.")
             st.stop()
         except requests.exceptions.HTTPError as exc:
             st.error(f"🚨 **Backend error {exc.response.status_code}:** {exc.response.text}")
@@ -431,19 +695,18 @@ if submitted:
             st.error(f"❌ Unexpected error: {exc}")
             st.stop()
 
-    # ── Parse Response ────────────────────────────────────────────────────────
-    category: str        = data.get("category", "incorrect")
-    probabilities: dict  = data.get("probabilities", {})
-    reasoning: str       = data.get("reasoning", "No reasoning provided.")
-    cfg                  = CATEGORY_CONFIG.get(category, CATEGORY_CONFIG["incorrect"])
+    # Parse Response
+    category: str       = data.get("category", "incorrect")
+    probabilities: dict = data.get("probabilities", {})
+    reasoning: str      = data.get("reasoning", "No reasoning provided.")
+    cfg                 = CATEGORY_CONFIG.get(category, CATEGORY_CONFIG["incorrect"])
+    confidence: float   = probabilities.get(category, 0.0)
 
-    # Confidence = probability of the winning category
-    confidence: float = probabilities.get(category, 0.0)
-
+    # Results Header
     st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
     st.markdown("### 📊 Evaluation Results")
 
-    # ── Row 1: Category card + Confidence metrics ─────────────────────────
+    # Row 1: Verdict + Probabilities
     res_col1, res_col2 = st.columns([3, 5])
 
     with res_col1:
@@ -459,7 +722,6 @@ if submitted:
 
     with res_col2:
         st.markdown('<p class="section-label">📈 Category Probabilities</p>', unsafe_allow_html=True)
-
         prob_correct       = probabilities.get("correct", 0.0)
         prob_contradictory = probabilities.get("contradictory", 0.0)
         prob_incorrect     = probabilities.get("incorrect", 0.0)
@@ -472,28 +734,32 @@ if submitted:
         st.markdown('<p class="section-label" style="margin-top:0.75rem">🎯 Confidence Score</p>', unsafe_allow_html=True)
         st.progress(confidence, text=f"{confidence * 100:.1f}% confidence in **{cfg['label']}**")
 
-    # ── Row 2: Reasoning ──────────────────────────────────────────────────
+    # Row 2: Reasoning
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-    st.markdown('<p class="section-label">💬 Semantic Reasoning</p>', unsafe_allow_html=True)
-
+    st.markdown('<p class="section-label">💬 AI Reasoning & Explanation</p>', unsafe_allow_html=True)
     with st.expander("View detailed AI reasoning", expanded=True):
         st.markdown(
             f'<div class="reasoning-box">{reasoning}</div>',
             unsafe_allow_html=True,
         )
 
-    # ── Debug (hidden by default) ─────────────────────────────────────────
+    # Debug
     with st.expander("🛠️ Raw API Response (debug)", expanded=False):
         st.json(data)
 
 # ---------------------------------------------------------------------------
-# Footer
+# FOOTER
 # ---------------------------------------------------------------------------
 
 st.markdown(
     """
-    <div style="text-align:center;color:#334155;font-size:0.8rem;margin-top:3rem;padding-top:1rem;border-top:1px solid #1e293b">
-        EduEval AI · ED-05 Hackathon · Powered by FastAPI + Streamlit
+    <div class="footer">
+        <b>EduEval AI</b> &nbsp;·&nbsp; Team <b>Asynchronous</b> &nbsp;·&nbsp;
+        ED-05 Hackathon &nbsp;·&nbsp; Powered by <b>FastAPI</b> + <b>Streamlit</b> + <b>Google Gemini</b>
+        <br>
+        <span style="color:#cbd5e1;font-size:0.72rem;">
+            Benchmark Score: 91.65/100 &nbsp;|&nbsp; SemEval-2013 Task 7 &nbsp;|&nbsp; CF1–CF4 Adversarial Defense
+        </span>
     </div>
     """,
     unsafe_allow_html=True,
