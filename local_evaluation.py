@@ -264,6 +264,85 @@ class APIPrediction:
     probabilities: Dict[str, float]
 
 
+# ===========================================================================
+# 3b. Local Model Predictor (offline inference — no API calls)
+# ===========================================================================
+
+
+def format_for_model(question: str, student_answer: str, reference_answer: str = "") -> str:
+    """Format one instance exactly the way train_baseline.py did.
+
+    The trained pipeline expects the literal string::
+
+        "Question: {q} | Reference: {ref} | Student: {a}"
+
+    Any drift here silently degrades accuracy, so keep this in sync with
+    ``train_baseline.prepare_features``.
+    """
+    return f"Question: {question} | Reference: {reference_answer} | Student: {student_answer}"
+
+
+class LocalModelPredictor:
+    """Runs ``baseline_model.joblib`` locally instead of calling the API.
+
+    The benchmark needs 5 predictions per SemEval item (original + CF1-CF4).
+    Driving that through the HTTP endpoint costs ~44.5k API calls on the full
+    corpus, which no free tier allows. Local inference produces the same
+    ``APIPrediction`` shape in seconds with no quota, and makes the reported
+    numbers reproducible.
+
+    Predictions are batched because a TF-IDF transform is dramatically faster
+    on thousands of rows than one row at a time.
+    """
+
+    CHUNK_SIZE = 4096
+
+    def __init__(self, model_path: str):
+        import joblib
+
+        self.model_path = model_path
+        try:
+            self.pipeline = joblib.load(model_path)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"Model artifact not found at '{model_path}'. "
+                f"Train it first with: python train_baseline.py"
+            ) from exc
+
+        self.classes: List[str] = [str(c) for c in getattr(self.pipeline, "classes_", VALID_LABELS)]
+        if sorted(self.classes) != sorted(VALID_LABELS):
+            print(
+                f"[WARN] Model classes {self.classes} do not match the ED-05 "
+                f"label set {VALID_LABELS}.",
+                file=sys.stderr,
+            )
+
+    def predict_batch(self, instances: List[Tuple[str, str, str]]) -> List[APIPrediction]:
+        """Predict many ``(question, student_answer, reference_answer)`` tuples.
+
+        Returns one ``APIPrediction`` per input, in order.
+        """
+        if not instances:
+            return []
+
+        results: List[APIPrediction] = []
+
+        for start in range(0, len(instances), self.CHUNK_SIZE):
+            chunk = instances[start : start + self.CHUNK_SIZE]
+            texts = [format_for_model(q, a, r) for q, a, r in chunk]
+
+            proba = self.pipeline.predict_proba(texts)
+
+            for row in proba:
+                probs = {label: 0.0 for label in VALID_LABELS}
+                for label, value in zip(self.classes, row):
+                    probs[str(label)] = float(value)
+                category = max(probs, key=probs.get)
+                results.append(APIPrediction(category=category, probabilities=probs))
+
+        return results
+
+
 def call_evaluate_api(
     api_url: str,
     question: str,
@@ -422,14 +501,30 @@ def run_pipeline(
     limit: Optional[int] = None,
     delay: float = 2.0,
     save_json_path: Optional[str] = None,
+    model_path: Optional[str] = None,
 ) -> None:
-    """Execute the complete ED-05 evaluation pipeline."""
+    """Execute the complete ED-05 evaluation pipeline.
+
+    Two backends are available:
+
+    ``model_path`` (local, default for full runs)
+        Loads ``baseline_model.joblib`` and predicts in-process. Zero API
+        calls, so the full corpus is tractable and the run is reproducible.
+
+    ``api_url`` (remote)
+        Calls the live ``/evaluate`` endpoint. Useful for scoring the deployed
+        Gemini-backed service, but costs 5 API calls per item.
+    """
+    using_model = model_path is not None
+    endpoint_label = model_path if using_model else api_url
+
     print()
     print(DIVIDER)
     print("  [EduEval AI] -- ED-05 Bias-Resistant Evaluation Pipeline")
     print(DIVIDER)
     print(f"  Dataset Path : {data_path}")
-    print(f"  API Endpoint : {api_url}")
+    print(f"  Backend      : {'LOCAL MODEL' if using_model else 'REMOTE API'}")
+    print(f"  Endpoint     : {endpoint_label}")
     if limit:
         print(f"  Sample Limit : {limit} instances")
     print(DIVIDER)
@@ -459,45 +554,106 @@ def run_pipeline(
     cf_preds: Dict[str, List[str]] = {"CF1": [], "CF2": [], "CF3": [], "CF4": []}
     cf4_probs: List[Dict[str, float]] = []
 
-    print("[3/4] Running original and counterfactual evaluations against API ...\n")
+    true_labels = [item.true_label for item in items]
 
-    for idx, item in enumerate(items, start=1):
-        print(f"  > [{idx}/{len(items)}] Question ID: {item.question_id} | Answer ID: {item.answer_id}")
-        print(f"    Question   : {item.question[:65]}..." if len(item.question) > 65 else f"    Question   : {item.question}")
-        print(f"    True Label : {item.true_label}")
-        true_labels.append(item.true_label)
-
-        # -- Evaluate Original Answer --
-        orig_pred = call_evaluate_api(api_url, item.question, item.student_answer, item.reference_answer)
-        original_preds.append(orig_pred.category)
-        original_probs.append(orig_pred.probabilities)
-
-        match_tag = "[OK]" if orig_pred.category == item.true_label else "[MISS]"
-        probs_str = ", ".join(f"{k}: {v:.2f}" for k, v in orig_pred.probabilities.items())
-        print(f"    [Orig] Pred : {orig_pred.category:<13} {match_tag:<6} ({probs_str})")
-        time.sleep(delay)
-
-        # -- Generate Counterfactuals --
-        cf_texts = {
+    # -- Build every counterfactual variant up front (shared by both backends) --
+    cf_texts_per_item: List[Dict[str, str]] = [
+        {
             "CF1": generate_cf1(item.student_answer),
             "CF2": generate_cf2(item.student_answer),
             "CF3": generate_cf3(item.student_answer),
             "CF4": generate_cf4(item.student_answer, tfidf_vectorizer),
         }
+        for item in items
+    ]
 
-        # -- Evaluate CF1 - CF4 --
-        for cf_key, cf_text in cf_texts.items():
-            cf_pred = call_evaluate_api(api_url, item.question, cf_text, item.reference_answer)
-            cf_preds[cf_key].append(cf_pred.category)
+    if using_model:
+        # ---------------------------------------------------------------
+        # LOCAL MODEL PATH — batched, zero API calls.
+        # ---------------------------------------------------------------
+        predictor = LocalModelPredictor(model_path)
 
-            if cf_key == "CF4":
-                cf4_probs.append(cf_pred.probabilities)
+        # Flatten every request (original first, then CF1..CF4) into one list
+        # so the TF-IDF transform runs over thousands of rows at once.
+        flat: List[Tuple[str, str, str]] = []
+        index_map: List[Tuple[str, int]] = []  # (variant_key, item_idx)
 
-            cf_match = "[MATCH]" if cf_pred.category == orig_pred.category else "[DIFF]"
-            print(f"    [{cf_key}] Pred : {cf_pred.category:<13} {cf_match:<6}")
+        for idx, (item, cf_map) in enumerate(zip(items, cf_texts_per_item)):
+            flat.append((item.question, item.student_answer, item.reference_answer))
+            index_map.append(("ORIG", idx))
+            for cf_key in ("CF1", "CF2", "CF3", "CF4"):
+                flat.append((item.question, cf_map[cf_key], item.reference_answer))
+                index_map.append((cf_key, idx))
+
+        print(
+            f"[3/4] Running local model over {len(flat)} predictions "
+            f"({len(items)} items x 5 variants) ...\n"
+        )
+
+        started = time.time()
+        flat_preds = predictor.predict_batch(flat)
+        elapsed = time.time() - started
+
+        for (cf_key, item_idx), pred in zip(index_map, flat_preds):
+            if cf_key == "ORIG":
+                original_preds.append(pred.category)
+                original_probs.append(pred.probabilities)
+            else:
+                cf_preds[cf_key].append(pred.category)
+                if cf_key == "CF4":
+                    cf4_probs.append(pred.probabilities)
+
+        print(f"    Completed {len(flat_preds)} predictions in {elapsed:.2f}s")
+
+        # Per-item detail for a readable sample of the run.
+        for idx, item in enumerate(items[:5]):
+            probs_str = ", ".join(f"{k}: {v:.2f}" for k, v in original_probs[idx].items())
+            match_tag = "[OK]" if original_preds[idx] == item.true_label else "[MISS]"
+            print(f"  > [{idx + 1}] QID: {item.question_id} | AID: {item.answer_id}")
+            print(f"    True Label : {item.true_label}")
+            print(f"    [Orig] Pred : {original_preds[idx]:<13} {match_tag:<6} ({probs_str})")
+            for cf_key in ("CF1", "CF2", "CF3", "CF4"):
+                tag = "[MATCH]" if cf_preds[cf_key][idx] == original_preds[idx] else "[DIFF]"
+                print(f"    [{cf_key}] Pred : {cf_preds[cf_key][idx]:<13} {tag:<6}")
+            print()
+
+        if len(items) > 5:
+            print(f"    ({len(items) - 5} further items scored; use --save-json for the full breakdown)\n")
+
+    else:
+        # ---------------------------------------------------------------
+        # REMOTE API PATH — unchanged behaviour, 5 calls per item.
+        # ---------------------------------------------------------------
+        print("[3/4] Running original and counterfactual evaluations against API ...\n")
+
+        for idx, (item, cf_texts) in enumerate(zip(items, cf_texts_per_item), start=1):
+            print(f"  > [{idx}/{len(items)}] Question ID: {item.question_id} | Answer ID: {item.answer_id}")
+            print(f"    Question   : {item.question[:65]}..." if len(item.question) > 65 else f"    Question   : {item.question}")
+            print(f"    True Label : {item.true_label}")
+
+            # -- Evaluate Original Answer --
+            orig_pred = call_evaluate_api(api_url, item.question, item.student_answer, item.reference_answer)
+            original_preds.append(orig_pred.category)
+            original_probs.append(orig_pred.probabilities)
+
+            match_tag = "[OK]" if orig_pred.category == item.true_label else "[MISS]"
+            probs_str = ", ".join(f"{k}: {v:.2f}" for k, v in orig_pred.probabilities.items())
+            print(f"    [Orig] Pred : {orig_pred.category:<13} {match_tag:<6} ({probs_str})")
             time.sleep(delay)
 
-        print()
+            # -- Evaluate CF1 - CF4 --
+            for cf_key, cf_text in cf_texts.items():
+                cf_pred = call_evaluate_api(api_url, item.question, cf_text, item.reference_answer)
+                cf_preds[cf_key].append(cf_pred.category)
+
+                if cf_key == "CF4":
+                    cf4_probs.append(cf_pred.probabilities)
+
+                cf_match = "[MATCH]" if cf_pred.category == orig_pred.category else "[DIFF]"
+                print(f"    [{cf_key}] Pred : {cf_pred.category:<13} {cf_match:<6}")
+                time.sleep(delay)
+
+            print()
 
     # 4. Compute Metrics
     print("[4/4] Calculating final benchmark metrics ...\n")
@@ -602,14 +758,31 @@ def build_parser() -> argparse.ArgumentParser:
         "-u",
         type=str,
         default="http://127.0.0.1:8000/evaluate",
-        help="EduEval AI backend evaluation API endpoint URL.",
+        help="EduEval AI backend evaluation API endpoint URL (used when --model is omitted).",
+    )
+    parser.add_argument(
+        "--model",
+        "-m",
+        type=str,
+        default="baseline_model.joblib",
+        help=(
+            "Path to the locally trained classifier (default: baseline_model.joblib). "
+            "Running the benchmark against this model costs zero API calls, which is the "
+            "only practical option at full corpus scale. Pass --no-model to force the "
+            "remote API path instead."
+        ),
+    )
+    parser.add_argument(
+        "--no-model",
+        action="store_true",
+        help="Ignore --model and evaluate through the remote /evaluate API endpoint.",
     )
     parser.add_argument(
         "--limit",
         "-n",
         type=int,
-        default=3,
-        help="Maximum number of student answers to evaluate (default: 3).",
+        default=0,
+        help="Maximum number of student answers to evaluate (default: 0 = no limit, full corpus).",
     )
     parser.add_argument(
         "--delay",
@@ -637,6 +810,7 @@ if __name__ == "__main__":
             limit=args.limit,
             delay=args.delay,
             save_json_path=args.save_json,
+            model_path=None if args.no_model else args.model,
         )
     except KeyboardInterrupt:
         print("\n[!] Evaluation interrupted by user.", file=sys.stderr)
