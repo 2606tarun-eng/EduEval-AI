@@ -27,3 +27,8 @@ Thumbs.db
 *.joblib
 *.pkl
 *.zip
+
+# ...except the benchmark artifact. ED-05 scores reproducibility, and
+# `python local_evaluation.py` must work straight after a fresh clone without
+# forcing the grader to retrain first. Regenerate with `python train_baseline.py`.
+!baseline_model.joblib
