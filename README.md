@@ -124,6 +124,31 @@ streamlit run frontend/app.py --server.port 8501
 ```
 * Dashboard URL: **`http://localhost:8501`**
 
+### 3. Deploy the Dashboard (Streamlit Community Cloud)
+
+The dashboard is a thin client — it renders the UI and forwards submissions to
+the FastAPI backend. It runs no model locally, so it deploys cheaply.
+
+1. Push your changes to GitHub.
+2. Go to **[share.streamlit.io](https://share.streamlit.io)** → *New app* → *Deploy from GitHub*.
+3. Pick `2606tarun-eng/EduEval-AI`, branch `main`.
+4. Set **Main file path** to `frontend/app.py`.
+5. Deploy.
+
+You get a permanent `*.streamlit.app` URL. **Every subsequent `git push`
+redeploys automatically — the URL never changes**, so the dashboard can be
+edited freely without breaking links handed out to anyone.
+
+The frontend already targets the deployed backend by default. To point it
+somewhere else, set `BACKEND_BASE_URL` (e.g. for local testing):
+
+```bash
+BACKEND_BASE_URL=http://localhost:8000 streamlit run frontend/app.py
+```
+
+Theme lives in **`.streamlit/config.toml`** and matches the custom CSS in
+`frontend/app.py`.
+
 ---
 
 ## 📊 Running Local Evaluation (ED-05 Scorecard)

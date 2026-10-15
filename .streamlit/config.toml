@@ -1,0 +1,24 @@
+# Streamlit configuration
+# Colours mirror the custom CSS in frontend/app.py so Streamlit's own widgets
+# (buttons, inputs, expanders) blend with the hand-styled dark UI instead of
+# fighting it.
+
+[theme]
+base = "dark"
+primaryColor = "#6366f1"
+backgroundColor = "#0a0a0f"
+secondaryBackgroundColor = "#111827"
+textColor = "#e2e8f0"
+
+[server]
+# Required for container/Cloud deployments -- Streamlit cannot open a browser.
+headless = true
+# Uploads are exam scripts and photos; keep the ceiling generous but bounded.
+maxUploadSize = 20
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = true
