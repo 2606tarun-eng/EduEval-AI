@@ -158,7 +158,7 @@ with st.expander("ℹ️ How it works", expanded=False):
     with h1:
         st.markdown('<div class="how-step"><div class="step-icon">📝</div><div class="step-title">Step 1: Input</div><div class="step-desc">Type your question & answer, or upload a handwritten sheet.</div></div>', unsafe_allow_html=True)
     with h2:
-        st.markdown('<div class="how-step"><div class="step-icon">👁️</div><div class="step-title">Step 2: OCR</div><div class="step-desc">EasyOCR reads handwritten text and auto-fills the form.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="how-step"><div class="step-icon">👁️</div><div class="step-title">Step 2: OCR</div><div class="step-desc">Cloud OCR reads handwritten text and auto-fills the form.</div></div>', unsafe_allow_html=True)
     with h3:
         st.markdown('<div class="how-step"><div class="step-icon">🤖</div><div class="step-title">Step 3: AI Grades</div><div class="step-desc">Google Gemini evaluates and classifies the student answer.</div></div>', unsafe_allow_html=True)
     with h4:

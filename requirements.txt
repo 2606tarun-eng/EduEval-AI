@@ -7,10 +7,12 @@ pydantic>=2.0.0
 python-dotenv>=1.0.0
 openai>=1.0.0
 
-# Frontend UI & OCR
+# Frontend UI
 streamlit>=1.30.0
-easyocr>=1.7.0
 pillow>=9.5.0
+
+# OCR — cloud API (OCR.Space). Local EasyOCR/PyTorch was removed: it needs
+# ~480 MB of RAM and crashed Render's 512 MB free-tier instances.
 
 # Machine Learning & Evaluation Metrics
 scikit-learn>=1.3.0

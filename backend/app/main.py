@@ -143,7 +143,7 @@ async def evaluate_answer(request: EvaluationRequest) -> EvaluationResponse:
     summary="Extract text from an uploaded image (OCR)",
     description=(
         "Accepts a JPEG/PNG image and returns the extracted plain text using "
-        "EasyOCR.  The endpoint validates the content-type and gracefully handles "
+        "OCR.Space.  The endpoint validates the content-type and gracefully handles "
         "corrupted files."
     ),
     tags=["OCR"],

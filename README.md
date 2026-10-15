@@ -29,7 +29,7 @@ An end-to-end AI assessment engine built to solve **ED-05: Bias-Resistant Short-
    * Computes **Macro-F1 (45 pts)**, **CF Consistency (30 pts)**, **$U_{CF4}$ Resistance (15 pts)**, and **Multiclass Brier Calibration (5 pts)**.
 5. **Interactive Dashboard with Vision OCR & Smart Split**:
    * Upload handwritten or printed exam scripts (JPEG/PNG).
-   * Extracts text using **EasyOCR**.
+   * Extracts text using the **OCR.Space** cloud API (no heavy local model).
    * Automatically detects and splits combined Question + Answer images or pasted text.
 
 ---
@@ -43,7 +43,7 @@ EduEval Ai/
 │   │   ├── main.py          # FastAPI application routes (/evaluate, /extract-text)
 │   │   ├── llm_eval.py      # Bias-resistant LLM evaluation engine
 │   │   ├── schemas.py       # Pydantic schemas (requests, responses, probabilities)
-│   │   └── ocr_util.py      # EasyOCR image extraction module
+│   │   └── ocr_util.py      # OCR.Space cloud image extraction module
 │   ├── .env                 # API credentials & model settings
 │   └── requirements.txt
 ├── frontend/
@@ -93,7 +93,17 @@ Ensure `backend/.env` contains:
 LLM_API_KEY=your_gemini_or_openai_api_key_here
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 LLM_MODEL=gemini-3.5-flash
+OCR_API_KEY=helloworld
 ```
+
+`OCR_API_KEY` defaults to `helloworld`, OCR.Space's public sandbox key. That works
+for demos but is heavily rate-limited — grab a free personal key at
+**https://ocr.space/ocrapi** (25,000 requests/month).
+
+> **Note:** OCR runs via the OCR.Space API rather than a local EasyOCR/PyTorch
+> model. The local model needed ~480 MB of RAM and exhausted Render's 512 MB
+> free-tier instances, crashing the entire backend whenever an image was
+> uploaded. Moving OCR off-box keeps the deployed service small and stable.
 
 ---
 
