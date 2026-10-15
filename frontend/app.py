@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import re
 import os
+import threading
 
 st.set_page_config(
     page_title="EduEval AI",
@@ -71,6 +72,27 @@ OCR_URL     = f"{DEFAULT_BASE_URL}/extract-text"
 # first request after any quiet period. Keep this comfortably above that.
 API_TIMEOUT = int(os.getenv("BACKEND_TIMEOUT", "150"))
 OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "90"))
+
+# Render's free tier spins the instance down after ~15 minutes idle. Measured
+# cold start is ~83s, which used to land entirely on the person clicking
+# "Evaluate". Warming the backend in the background the moment the page opens
+# overlaps that delay with the time the visitor spends reading the page and
+# typing their answer, so the submit itself returns immediately.
+WARMUP_ENABLED = os.getenv("BACKEND_WARMUP", "true").lower() == "true"
+
+
+def _warmup_backend() -> None:
+    """Ping the health endpoint so the backend starts waking in the background."""
+    try:
+        requests.get(f"{DEFAULT_BASE_URL}/", timeout=WARMUP_TIMEOUT)
+    except Exception:
+        pass  # warmup is best-effort; a failure here must never break the UI
+
+
+WARMUP_TIMEOUT = int(os.getenv("BACKEND_WARMUP_TIMEOUT", "20"))
+
+if WARMUP_ENABLED:
+    threading.Thread(target=_warmup_backend, daemon=True).start()
 
 CATEGORY_CONFIG = {
     "correct":       {"icon": "✅", "label": "Correct"},
