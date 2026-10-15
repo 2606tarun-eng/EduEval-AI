@@ -66,6 +66,12 @@ DEFAULT_BASE_URL = os.getenv("BACKEND_BASE_URL", "https://edueval-ai-njfc.onrend
 BACKEND_URL = f"{DEFAULT_BASE_URL}/evaluate"
 OCR_URL     = f"{DEFAULT_BASE_URL}/extract-text"
 
+# Render's free tier spins the instance down when idle; the next request has to
+# wait for a cold start. Measured at ~83s, so a 60s timeout failed on the very
+# first request after any quiet period. Keep this comfortably above that.
+API_TIMEOUT = int(os.getenv("BACKEND_TIMEOUT", "150"))
+OCR_TIMEOUT = int(os.getenv("OCR_TIMEOUT", "90"))
+
 CATEGORY_CONFIG = {
     "correct":       {"icon": "✅", "label": "Correct"},
     "contradictory": {"icon": "⚠️", "label": "Contradictory"},
@@ -79,7 +85,7 @@ for key, val in [("question_input", ""), ("ref_input", ""), ("student_input", ""
 def extract_ocr_text(uploaded_file, field_name):
     try:
         files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type or "image/png")}
-        res = requests.post(OCR_URL, files=files, timeout=60)
+        res = requests.post(OCR_URL, files=files, timeout=OCR_TIMEOUT)
         if res.status_code == 200:
             return res.json().get("extracted_text", "")
         else:
@@ -261,7 +267,7 @@ if submitted:
 
     with st.spinner("🤖 Evaluating with Google Gemini AI…"):
         try:
-            response = requests.post(BACKEND_URL, json=payload, timeout=60)
+            response = requests.post(BACKEND_URL, json=payload, timeout=API_TIMEOUT)
             response.raise_for_status()
             data = response.json()
         except requests.exceptions.ConnectionError:

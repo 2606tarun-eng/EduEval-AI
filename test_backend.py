@@ -70,7 +70,7 @@ def test_evaluate():
     response = None
     for attempt in range(3):
         try:
-            response = requests.post(url, json=payload, timeout=60)
+            response = requests.post(url, json=payload, timeout=150)
             if response.status_code == 200:
                 break
             if response.status_code in (429, 502) and attempt < 2:

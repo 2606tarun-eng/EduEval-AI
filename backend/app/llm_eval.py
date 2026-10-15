@@ -9,10 +9,12 @@ three keys: ``category``, ``probabilities``, and ``reasoning``.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
-from typing import Any
+import time
+from typing import Any, Dict, List, Tuple
 
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
@@ -40,10 +42,146 @@ FALLBACK_MODELS = [
     "gemini-3.7-flash",
 ]
 
+# ---------------------------------------------------------------------------
+# Failover tuning
+# ---------------------------------------------------------------------------
+
+# How many times to retry the SAME model on a 429 before rotating away from it.
+MAX_RETRIES_PER_MODEL = int(os.getenv("LLM_MAX_RETRIES", "3"))
+
+# How long a quota-exhausted model is skipped. Without this every new request
+# re-tries a permanently exhausted model and pays a failed round-trip first.
+MODEL_COOLDOWN_SECONDS = int(os.getenv("LLM_COOLDOWN_SECONDS", "300"))
+
+# Backoff base for 429 retries (doubles each attempt, capped).
+RETRY_BASE_DELAY = float(os.getenv("LLM_RETRY_DELAY", "2.0"))
+RETRY_MAX_DELAY = float(os.getenv("LLM_RETRY_MAX_DELAY", "30.0"))
+
+# model name -> monotonic timestamp until which it is considered exhausted
+_model_cooldown_until: Dict[str, float] = {}
+
+
+def candidate_models() -> List[str]:
+    """Models to try, in order: ``LLM_MODEL`` first, then the fallback list.
+
+    ``LLM_MODEL`` used to be ignored entirely -- the rotation was hardcoded to
+    FALLBACK_MODELS -- so changing it in ``.env`` had no effect whatsoever.
+    """
+    ordered: List[str] = []
+
+    primary = (os.getenv("LLM_MODEL") or "").strip()
+    if primary:
+        ordered.append(primary)
+
+    for model in FALLBACK_MODELS:
+        if model not in ordered:
+            ordered.append(model)
+
+    return ordered
+
+
+def models_in_cooldown() -> List[str]:
+    """Models currently considered quota-exhausted."""
+    now = time.monotonic()
+    return [m for m, until in _model_cooldown_until.items() if until > now]
+
+
+def mark_cooldown(model: str) -> None:
+    _model_cooldown_until[model] = time.monotonic() + MODEL_COOLDOWN_SECONDS
+    logger.warning("model %s exhausted; cooling down for %ds", model, MODEL_COOLDOWN_SECONDS)
+
+
+def clear_cooldown(model: str) -> None:
+    _model_cooldown_until.pop(model, None)
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    """True when the failure is a quota/rate limit worth retrying."""
+    if getattr(exc, "status_code", None) == 429:
+        return True
+    text = str(exc).lower()
+    return any(
+        marker in text
+        for marker in ("429", "rate limit", "ratelimit", "resource_exhausted", "quota exceeded")
+    )
+
+
 def get_model_name(attempt: int = 0) -> str:
-    """Return model name, rotating to fresh models if earlier ones hit quota limits."""
-    # Always prioritize the robust FALLBACK_MODELS sequence
-    return FALLBACK_MODELS[attempt % len(FALLBACK_MODELS)]
+    """Backwards-compatible accessor: the nth candidate model."""
+    models = candidate_models()
+    return models[attempt % len(models)]
+
+
+async def _complete_with_failover(user_message: str) -> Tuple[Any, str]:
+    """Call the chat model, retrying on 429 and rotating on sustained failure.
+
+    Returns ``(response, model_used)``.
+    """
+    models = candidate_models()
+    now = time.monotonic()
+    available = [m for m in models if _model_cooldown_until.get(m, 0.0) <= now]
+    skipped = [m for m in models if m not in available]
+
+    if skipped:
+        logger.warning("skipping models in cooldown: %s", skipped)
+
+    if not available:
+        # Everything is exhausted. Clear the cooldowns and try anyway rather
+        # than failing outright -- quotas reset on a rolling window, so the
+        # earliest-cooling model may well be usable again.
+        logger.warning("all models in cooldown; resetting and retrying anyway")
+        _model_cooldown_until.clear()
+        available = models
+
+    failures: List[str] = []
+
+    for model in available:
+        delay = RETRY_BASE_DELAY
+
+        for attempt in range(1, MAX_RETRIES_PER_MODEL + 1):
+            try:
+                logger.info(
+                    "Calling LLM model: %s (attempt %d/%d)", model, attempt, MAX_RETRIES_PER_MODEL
+                )
+                response = await _client.chat.completions.create(
+                    model=model,
+                    temperature=0.0,  # 0.0 for deterministic, objective grading
+                    max_tokens=1200,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_message},
+                    ],
+                )
+                clear_cooldown(model)
+                return response, model
+
+            except Exception as exc:
+                if _is_rate_limit(exc):
+                    if attempt < MAX_RETRIES_PER_MODEL:
+                        wait = min(delay, RETRY_MAX_DELAY)
+                        logger.warning(
+                            "rate limited on %s (attempt %d/%d); retrying in %.1fs",
+                            model, attempt, MAX_RETRIES_PER_MODEL, wait,
+                        )
+                        await asyncio.sleep(wait)
+                        delay *= 2
+                        continue
+
+                    # Retries exhausted for this model -- stop using it briefly.
+                    mark_cooldown(model)
+                    failures.append(f"{model}: {exc}")
+                else:
+                    # Auth errors, malformed requests, network blips: rotating
+                    # models will not help, but try the next one anyway rather
+                    # than aborting the whole evaluation.
+                    logger.warning("call to %s failed: %s", model, exc)
+                    failures.append(f"{model}: {exc}")
+
+                break  # move on to the next model
+
+    detail = "; ".join(failures) if failures else "no models available"
+    raise RuntimeError(f"LLM API error after trying {len(available)} model(s) -> {detail}")
 
 # ---------------------------------------------------------------------------
 # System prompt — ED-05 bias-resistant assessment rules
@@ -172,33 +310,8 @@ async def evaluate_answer_semantics(data: EvaluationRequest) -> dict[str, Any]:
     user_message = "\n\n".join(user_parts)
 
     # ── Call the LLM with failover for resilient free-tier handling ─────────
-    response = None
-    last_exc = None
-    for attempt in range(len(FALLBACK_MODELS)):
-        try:
-            current_model = get_model_name(attempt)
-            logger.info("Calling LLM model: %s (attempt %d)", current_model, attempt + 1)
-            response = await _client.chat.completions.create(
-                model=current_model,
-                temperature=0.0,           # 0.0 for deterministic, objective grading
-                max_tokens=1200,
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user",   "content": user_message},
-                ],
-            )
-            break
-        except Exception as exc:
-            last_exc = exc
-            logger.warning("LLM API call attempt %d on %s failed: %s", attempt + 1, current_model, exc)
-            if attempt < len(FALLBACK_MODELS) - 1:
-                import asyncio
-                # Immediately switch model on 429 (quota) with minimal 1s pause
-                await asyncio.sleep(1.0)
-            else:
-                logger.exception("All LLM API call attempts failed across all fallback models")
-                raise RuntimeError(f"LLM API error: {exc}") from exc
+    response, model_used = await _complete_with_failover(user_message)
+    logger.info("Evaluation completed using model: %s", model_used)
 
     raw_text: str = (response.choices[0].message.content or "").strip()
 
